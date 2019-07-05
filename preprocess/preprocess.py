@@ -16,6 +16,7 @@ Date: 20190704
 import nltk
 import torch
 import gc
+import argparse
 from pytorch_pretrained_bert import BertTokenizer
 
 
@@ -73,7 +74,7 @@ class BertData():
         return src_tokens, segment_ids, tgt_tokens
 
 
-def format_to_bert(raw_lists, save_file):
+def format_to_bert(args):
     """
     将raw_lists转换成所需的数据格式
     :param raw_lists: 整合src.txt和tgt.txt后的数据列表
@@ -82,6 +83,10 @@ def format_to_bert(raw_lists, save_file):
     """
     bert_data = BertData()
     vocabulary = []
+
+    src_file = args.src_file
+    tgt_file = args.tgt_file
+    raw_lists = load_data(src_file, tgt_file)
 
     for i in range(len(raw_lists)):
         item_list = raw_lists[i]['segment']
@@ -97,10 +102,10 @@ def format_to_bert(raw_lists, save_file):
             # 调用create vocabulary
             vocabulary = create_vocalbulary(src,tgt,vocabulary)
 
-    torch.save(raw_lists,save_file)
+    torch.save(raw_lists,args.dataset_file)
 
-    vocab_file = "vocab"
-    torch.save(vocabulary, vocab_file)
+    print(vocabulary)
+    torch.save(vocabulary, args.vocab_file)
 
     gc.collect()
 
@@ -166,4 +171,16 @@ def create_vocalbulary(src,tgt,vocb):
             vocb.append(t_word)
 
     return vocb
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-dataset_file",default='multi_heading.pt')
+    parser.add_argument("-vocab_file", default='vocab.pt')
+    parser.add_argument("-src_file",default='src.txt')
+    parser.add_argument("-tgt_file", default='tgt.txt')
+
+    args = parser.parse_args()
+
+    format_to_bert(args)
 
