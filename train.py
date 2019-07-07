@@ -10,6 +10,8 @@ Date: 20190705
 
 import argparse
 import torch
+import hierarchy_model
+from pytorch_pretrained_bert import BertModel
 
 def train(args):
     """
@@ -23,10 +25,16 @@ def train(args):
     batch_size = args.batch_size
     iterations = args.iterations
 
-
     # 首先取出训练数据
     train_file = args.train_file
     train_data = torch.load(train_file)
+    """
+    batch_size应该等于1，因为bert的output的shap为（batch_size, sequence_length, hidden_size)
+    我们采用的不同段落进行输入，无法使用多个batch_size进行训练。
+    另外，decoder部分的hidden_size应该是
+    """
+
+
 
 
 
