@@ -15,18 +15,25 @@ input_size = hidden_size =encoder_layer.hidden_size
 采用一层GRU
 encoder中的hidden_state即为input,decoder中的hidden_state=None
 它不需要hidden_state
+由于output的shape为(seq_len,batch_size,hidden_size)
+假设有N个标题，则对应N个Decoder，其所对应的seq_len（word的个数）也不同
+想法是：seq_len对齐后，进行相加，
+
 3. softmax
 P = softmax(wx+b)
-根据vocab_size，可以得到w的shape为（vocab_size,hidden_size)
-x的shape为（seq_len,batch,hidden_size)
-先对x进行reshape成（seq_len,hidden_size)
-这块有疑问，softmax是需要指定维度的，如果指定维度，则计算出的distribution不对
-因此这块需要重新考虑，向量维度如何变化
+根据vocab_size，可以得到W的shape为(vocab_size, hidden_size)
+x的shape应为（batch,hidden_size)
+b的shape为[vocab_size]
+初始化可以采用截断正态分布
+y = torch.nn.functional.linear(input=x,weight = W，bias=b)
+y的shape为(batch_size,vocab_size)
+res = torch.nn.funcational.linear(y)
 """
 
 
 from pytorch_pretrained_bert import BertModel
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 
@@ -40,4 +47,4 @@ class Summarizer(nn.Module):
         self.decoder = nn.GRU(input_size=768,hidden_size=768,num_layers=1)
 
     def forward(self, *input):
-        # 模型的具体实现方式
+        # 模型的具体实现方
