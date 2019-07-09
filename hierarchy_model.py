@@ -18,6 +18,7 @@ encoder中的hidden_state即为input,decoder中的hidden_state=None
 由于output的shape为(seq_len,batch_size,hidden_size)
 假设有N个标题，则对应N个Decoder，其所对应的seq_len（word的个数）也不同
 想法是：seq_len对齐后，进行相加，
+然后使用torch.sum(x,dim=0)可以变成shape(batch_size,hidden_size)
 
 3. softmax
 P = softmax(wx+b)

@@ -14,6 +14,40 @@ from hierarchy_model import Summarizer
 import random
 
 
+def get_maxlen(para_list):
+    """
+    获得一个segment中最长para的seq_len
+    :param para_list: 一个segment下所有的段落
+    :return: max_len
+    """
+    max_len = 0
+    for i in range(len(para_list)):
+        para_dict = para_list[i]
+        if i == 0:
+            max_len = len(para_dict['src'])
+        else:
+            src_len = len(para_dict['src'])
+            if src_len > max_len:
+                max_len = src_len
+
+    return max_len
+
+
+def padding_tensor(src_len,max_len):
+    """
+    创建需要padding的tensor
+    :param src_len: 当前段落的seq_len
+    :param max_len: 最长段落的seq_len
+    :return: zero_tensor
+    """
+    padding_len = max_len - src_len
+    zero_tensor = torch.tensor((), dtype=torch.float64)
+    batch_size=1
+    hidden_size=768
+    zero_tensor = zero_tensor.new_zeros((padding_len, batch_size,hidden_size))
+    return zero_tensor
+
+
 def train(args):
     """
     1. 首先load data，并将data送入Bert中，并生成向量
@@ -38,7 +72,41 @@ def train(args):
     model = Summarizer(args,device)
     random.shuffle(train_data)
     for i in range(len(train_data)):
-        seg = train_data[i]
+        # 取出一个段落的标题
+        seg_dict = train_data[i]
+        para_list = seg_dict['segment']
+        # 针对一个segment计算softmax和loss
+        para_num = len(para_list)
+        max_len = get_maxlen(para_list)
+
+        # 动态生成变量，并为其赋值
+        for j in range(para_num):
+            para_dict = para_list[j]
+            src_len = len(para_dict['src'])
+            para_output = model(para_dict)
+            if src_len < max_len:
+                zero_tensor = padding_tensor(src_len, max_len)
+                para_tensor = torch.cat((para_output, zero_tensor), 0)
+                exec('para_{} = {} '.format(j, para_tensor))
+            else:
+                exec('para_{} = {}'.format(j,para_output))
+
+        # 将当前段落的output和其他所有段落tensor的均值加到一起
+        for m in range(para_num):
+            exec()
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
