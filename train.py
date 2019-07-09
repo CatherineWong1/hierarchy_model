@@ -10,8 +10,9 @@ Date: 20190705
 
 import argparse
 import torch
-import hierarchy_model
-from pytorch_pretrained_bert import BertModel
+from hierarchy_model import Summarizer
+import random
+
 
 def train(args):
     """
@@ -33,6 +34,14 @@ def train(args):
     我们采用的不同段落进行输入，无法使用多个batch_size进行训练。
     另外，decoder部分的hidden_size应该是
     """
+    device = 'cuda'
+    model = Summarizer(args,device)
+    random.shuffle(train_data)
+    for i in range(len(train_data)):
+        seg = train_data[i]
+
+
+
 
 
 
@@ -73,6 +82,7 @@ if __name__ == '__main__':
     mode = args.mode
     if mode == "train":
         train(args)
+
     elif (mode == "val"):
         val(args)
     elif (mode == "predict"):

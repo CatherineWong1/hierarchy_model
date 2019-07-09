@@ -6,8 +6,8 @@ Date: 20190704
 1. 对src.txt和tgt.txt进行预处理，得到处理好的数据集，将数据集处理成Json的格式，但保存为.pt文件。
 由于需要考虑在训练时，选一个batch_size的数据，因此数据集格式如下：
 [{ "segment":
-  [{"src":原文段落1, "tgt":标题1, src_tokens:原文对应的wordPiece id, src_cls:原文对应的句子分隔, tgt_tokens:标题对应的wordPiece id},
-   {"src":原文段落1.1, "tgt":标题1.1, src_tokens:原文对应的wordPiece id, src_cls:原文对应的句子分隔, tgt_tokens:标题对应的wordPiece id}]
+  [{"src_txt":原文段落1, "tgt_txt":标题1, src:原文对应的wordPiece id, segs:原文对应的句子分隔, tgt:标题对应的wordPiece id},
+   {"src_txt":原文段落1.1, "tgt_txt":标题1.1, src_tokens:原文对应的wordPiece id, src_cls:原文对应的句子分隔, tgt_tokens:标题对应的wordPiece id}]
 }
 2. 对src.txt和tgt.txt中的所有单词，生成一个无重复的词汇表
 

@@ -33,12 +33,13 @@ res = torch.nn.funcational.linear(y)
 
 from pytorch_pretrained_bert import BertModel
 import torch.nn as nn
+import torch
 import torch.nn.functional as F
 
 
 
 class Summarizer(nn.Module):
-    def __init__(self,args):
+    def __init__(self,args,device):
         # 初始化模型，建立encoder和decoder
         super(Summarizer, self).__init__()
         self.encoder = BertModel.from_pretrained('bert-base-cased')
@@ -46,5 +47,32 @@ class Summarizer(nn.Module):
         # we choose same hiedden_size with bert embedding
         self.decoder = nn.GRU(input_size=768,hidden_size=768,num_layers=1)
 
-    def forward(self, *input):
-        # 模型的具体实现方
+        # make all of them to gpu
+        self.to(device)
+
+    def forward(self, para_dict):
+        """
+        构建模型，只针对一个para来
+        :param input: 假设只传入一个段落，对这一个段落进行
+        :return:
+        """
+        # Create Encoder，计算一个
+        self.encoder.train()
+        para_tokens_tensor = torch.tensor([para_dict['src']])
+        para_segments_tensor = torch.tensor([para_dict['segs']])
+
+        encoded_output,_ = self.encoder(para_tokens_tensor,para_segments_tensor,output_all_encoded_layers=False)
+
+        # send encoded_output into decoder
+        decoded_output,_ = self.decoder(encoded_output,h_0=None)
+
+        return decoded_output
+
+
+
+
+
+
+
+
+
