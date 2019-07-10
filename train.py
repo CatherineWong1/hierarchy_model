@@ -10,6 +10,8 @@ Date: 20190705
 
 import argparse
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from hierarchy_model import Summarizer
 import random
 
@@ -58,10 +60,18 @@ def train(args):
     根据vocab_size，可以得到W的shape为(vocab_size, hidden_size)
     x的shape应为（batch,hidden_size)，初始化使用正态分布
     b的shape为[vocab_size]，初始化使用正态分布
-    y = torch.nn.functional.linear(input=x,weight = W，bias=b)
+
+    3. 计算loss
+     y = torch.nn.functional.linear(input=x,weight = W，bias=b)
     y的shape为(batch_size,vocab_size)
     res = torch.nn.funcational.linear(y)
-    3. 计算loss
+    vocab_distribution = torch.softmax(res) # shape为(batch_size, vocab_size）
+    # topk返回的是output,output_indicies
+    title = torch.topk(vocab_distribution,5)
+    将gold summary的文本在vocab中找到相关id，进行cross entropy
+
+
+
     :param args: 从命令行传入的参数
     :return:
     """
@@ -123,6 +133,12 @@ def train(args):
         # 初始化参数
         w = torch.randn((batch_size, hidden_size))
         b = torch.randn((vocab_size))
+        # 初始化loss,设定loss的返回时scalar
+        loss = nn.BCELoss(reduction='none')
+
+
+
+
 
 
 
