@@ -72,6 +72,11 @@ def train(args):
     将gold summary的文本在vocab中找到相关id，进行cross entropy
 
     4. optimizer
+    简单写
+
+    5. 一次全数据的训练相当于一个epoch，N次iteration
+    一般一次iteration就是一次数据集为batch_size大小的训练
+    因此需要多次迭代
 
 
     :param args: 从命令行传入的参数
@@ -83,17 +88,25 @@ def train(args):
     hidden_size = 768
     lr = args.learning_rate
 
-
     # 首先取出训练数据
     train_file = args.train_file
     train_data = torch.load(train_file)
     vocab_file = args.vocab_file
     vocab = torch.load(vocab_file)
     vocab_size = len(vocab)
+
+    # 初始化参数
+    w = torch.randn((batch_size, hidden_size), requires_grad=True)
+    b = torch.randn((vocab_size), requires_grad=True)
+    # 初始化loss,设定loss的返回时scalar
+    loss_func = nn.BCELoss(reduction='none')
+    loss = 0
+
+
     """
     batch_size应该等于1，因为bert的output的shap为（batch_size, sequence_length, hidden_size)
-    我们采用的不同段落进行输入，无法使用多个batch_size进行训练。
-    另外，decoder部分的hidden_size应该是
+    我们采用的不同段落进行输入，无法使用一个batch_size中多个segment进行训练。
+    因此
     """
     device = 'cuda'
     model = Summarizer(args,device)
@@ -132,13 +145,6 @@ def train(args):
             avg_list[m] = torch.sum(temp_avg,dim=0)
 
         # 计算loss，进行gradient
-        # 初始化参数
-        w = torch.randn((batch_size, hidden_size),requires_grad= True)
-        b = torch.randn((vocab_size), requires_grad=True)
-        # 初始化loss,设定loss的返回时scalar
-        loss_func = nn.BCELoss(reduction='none')
-        loss = 0
-
         for j in range(para_num):
             para_dict = para_list[j]
             # 计算softmax
@@ -161,7 +167,7 @@ def train(args):
         optimizer = optim.Adagrad([w,b],lr=lr)
         optimizer.step(loss)
 
-    # 还需了解下iteration，上限是迭代5000次，每1000次保存一次checkpoint
+        # checkpoint，根据iteration来计算
 
 
 def val(args):
@@ -176,7 +182,9 @@ def val(args):
 
 def predict(args):
     """
-    generate heading from model
+    具体做法：
+    1. load checkpoint
+    2. 将
     :param args:
     :return:
     """

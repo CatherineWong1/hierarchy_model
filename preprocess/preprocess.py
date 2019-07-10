@@ -100,7 +100,6 @@ class BertData():
         return tgt_tokens
 
 
-
 def format_to_bert(args):
     """
     将raw_lists转换成所需的数据格式
@@ -171,8 +170,6 @@ def load_data(src_file,tgt_file):
                     break
 
     return raw_lists
-
-
 
 
 if __name__ == '__main__':

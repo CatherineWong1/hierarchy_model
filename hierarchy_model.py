@@ -43,7 +43,10 @@ class Summarizer(nn.Module):
     def __init__(self,args,device):
         # 初始化模型，建立encoder和decoder
         super(Summarizer, self).__init__()
-        self.encoder = BertModel.from_pretrained('bert-base-cased')
+        if args.mode == "train":
+            self.encoder = BertModel.from_pretrained('bert-base-cased')
+        elif args.mode == "eval":
+            self.encoder = BertModel()
         self.args = args
         # we choose same hiedden_size with bert embedding
         self.decoder = nn.GRU(input_size=768,hidden_size=768,num_layers=1)
