@@ -12,6 +12,7 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim as optim
 from hierarchy_model import Summarizer
 import random
 
@@ -70,6 +71,7 @@ def train(args):
     title = torch.topk(vocab_distribution,5)
     将gold summary的文本在vocab中找到相关id，进行cross entropy
 
+    4. optimizer
 
 
     :param args: 从命令行传入的参数
@@ -79,6 +81,8 @@ def train(args):
     batch_size = args.batch_size
     iterations = args.iterations
     hidden_size = 768
+    lr = args.learning_rate
+
 
     # 首先取出训练数据
     train_file = args.train_file
@@ -127,22 +131,37 @@ def train(args):
             temp_avg = avg_list[m] / 4
             avg_list[m] = torch.sum(temp_avg,dim=0)
 
-        """
-        计算每个段落的softmax，生成权重w和b，假设所有段落共享这两个参数
-        """
+        # 计算loss，进行gradient
         # 初始化参数
-        w = torch.randn((batch_size, hidden_size))
-        b = torch.randn((vocab_size))
+        w = torch.randn((batch_size, hidden_size),requires_grad= True)
+        b = torch.randn((vocab_size), requires_grad=True)
         # 初始化loss,设定loss的返回时scalar
-        loss = nn.BCELoss(reduction='none')
+        loss_func = nn.BCELoss(reduction='none')
+        loss = 0
 
+        for j in range(para_num):
+            para_dict = para_list[j]
+            # 计算softmax
+            input = avg_list[j]
+            linear_res = F.linear(input, w, b)
+            softmax_res = F.softmax(linear_res)
 
+            # 根据softmax选择top 5个单词，作为标题
+            top_res = torch.topk(softmax_res, 5)
+            title_index = top_res[1]
 
+            # cross entropy
+            tgt = para_dict['tgt']
+            tgt_tensor = torch.tensor(tgt,dtype=torch.float64)
+            loss_func = (title_index,tgt_tensor)
+            loss += loss_func
 
+        # optimizer
+        loss = float(loss/para_num)
+        optimizer = optim.Adagrad([w,b],lr=lr)
+        optimizer.step(loss)
 
-
-
-
+    # 还需了解下iteration，上限是迭代5000次，每1000次保存一次checkpoint
 
 
 def val(args):
@@ -164,7 +183,6 @@ def predict(args):
     print("predict function")
 
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-batch_size",default=64, type=int)
@@ -172,6 +190,7 @@ if __name__ == '__main__':
     parser.add_argument("-lstm_unit", default=128, type=int)
     parser.add_argument("-train_file", default="multi_heading.pt")
     parser.add_argument("-vocab_file",default="vocab.pt")
+    parser.add_argument("-learning_rate",default=0.001)
     parser.add_argument("-mode",default="train")
 
     args = parser.parse_args()
@@ -179,8 +198,7 @@ if __name__ == '__main__':
     mode = args.mode
     if mode == "train":
         train(args)
-
-    elif (mode == "val"):
+    elif mode == "val":
         val(args)
-    elif (mode == "predict"):
+    elif mode == "predict":
         predict(args)

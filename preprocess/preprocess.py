@@ -27,6 +27,7 @@ class BertData():
         self.sep_vid = self.tokenizer.vocab['[SEP]']
         self.cls_vid = self.tokenizer.vocab['[CLS]']
         self.pad_vid = self.tokenizer.vocab['[PAD]']
+        self.vocab = []
 
     def preprocess(self, src, tgt):
         """
@@ -67,11 +68,37 @@ class BertData():
 
         # 处理tgt:
         tgt_token = self.tokenizer.tokenize(tgt)
-        new_tgt_token = ['[CLS]'] + tgt_token
-
-        tgt_tokens = self.tokenizer.convert_tokens_to_ids(new_tgt_token)
+        tgt_tokens = self.conver_tgt_to_ids(tgt_token)
 
         return src_tokens, segment_ids, tgt_tokens
+
+    def create_vocabulary(self,src,tgt):
+        sent_lists = nltk.sent_tokenize(src)
+        for sent in sent_lists:
+            word_lists = nltk.word_tokenize(sent)
+            for word in word_lists:
+                try:
+                    index = self.vocab.index(word)
+                except Exception as e:
+                    self.vocab.append(word)
+
+        tgt_word = nltk.word_tokenize(tgt)
+        for t_word in tgt_word:
+            try:
+                index = self.vocab.index(t_word)
+            except Exception as e:
+                self.vocab.append(t_word)
+        return self.vocab
+
+    def conver_tgt_to_ids(self,tgt):
+        tgt_tokens = []
+        for i in range(len(tgt)):
+            token = tgt[i]
+            index = self.vocab.index(token)
+            tgt_tokens.append(index)
+
+        return tgt_tokens
+
 
 
 def format_to_bert(args):
@@ -100,7 +127,7 @@ def format_to_bert(args):
                 item['tgt'] = tgt_tokens
 
             # 调用create vocabulary
-            vocabulary = create_vocalbulary(src,tgt,vocabulary)
+            vocabulary = bert_data.create_vocabulary(src,tgt)
 
     torch.save(raw_lists,args.dataset_file)
 
@@ -146,31 +173,6 @@ def load_data(src_file,tgt_file):
     return raw_lists
 
 
-def create_vocalbulary(src,tgt,vocb):
-    """
-    生成不重复的词汇表
-    :param src: src文本
-    :param tgt: tgt文本
-    :param vocb: vocabulary list
-    :return: 新覆盖的 vocb
-    """
-    sent_lists = nltk.sent_tokenize(src)
-    for sent in sent_lists:
-        word_lists = nltk.word_tokenize(sent)
-        for word in word_lists:
-            try:
-                index = vocb.index(word)
-            except Exception as e:
-                vocb.append(word)
-
-    tgt_word = nltk.word_tokenize(tgt)
-    for t_word in tgt_word:
-        try:
-            index = vocb.index(t_word)
-        except Exception as e:
-            vocb.append(t_word)
-
-    return vocb
 
 
 if __name__ == '__main__':
