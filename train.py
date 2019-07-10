@@ -52,6 +52,15 @@ def train(args):
     """
     1. 首先load data，并将data送入Bert中，并生成向量
     2. 将生成的向量送入单层LSTM中，后街softmax得到vocab的prediction
+    做法：
+    seq_len对齐后，进行相加，然后使用torch.sum(x,dim=0)可以变成shape(batch_size,hidden_size)
+    P = softmax(wx+b)
+    根据vocab_size，可以得到W的shape为(vocab_size, hidden_size)
+    x的shape应为（batch,hidden_size)，初始化使用正态分布
+    b的shape为[vocab_size]，初始化使用正态分布
+    y = torch.nn.functional.linear(input=x,weight = W，bias=b)
+    y的shape为(batch_size,vocab_size)
+    res = torch.nn.funcational.linear(y)
     3. 计算loss
     :param args: 从命令行传入的参数
     :return:
@@ -59,10 +68,14 @@ def train(args):
     # 初始化参数
     batch_size = args.batch_size
     iterations = args.iterations
+    hidden_size = 768
 
     # 首先取出训练数据
     train_file = args.train_file
     train_data = torch.load(train_file)
+    vocab_file = args.vocab_file
+    vocab = torch.load(vocab_file)
+    vocab_size = len(vocab)
     """
     batch_size应该等于1，因为bert的output的shap为（batch_size, sequence_length, hidden_size)
     我们采用的不同段落进行输入，无法使用多个batch_size进行训练。
@@ -79,7 +92,8 @@ def train(args):
         para_num = len(para_list)
         max_len = get_maxlen(para_list)
 
-        # 动态生成变量，并为其赋值
+        # 对齐所有段落
+        padding_list = []
         for j in range(para_num):
             para_dict = para_list[j]
             src_len = len(para_dict['src'])
@@ -87,29 +101,28 @@ def train(args):
             if src_len < max_len:
                 zero_tensor = padding_tensor(src_len, max_len)
                 para_tensor = torch.cat((para_output, zero_tensor), 0)
-                exec('para_{} = {} '.format(j, para_tensor))
+                padding_list.append(para_tensor)
             else:
-                exec('para_{} = {}'.format(j,para_output))
+                padding_list.append(para_output)
 
-        # 将当前段落的output和其他所有段落tensor的均值加到一起
+        # 将当前段落的output和其他所有段落tensor的均值加到一起,并sum成shape为(batch_size,hidden_size)
+        avg_list = [0] * para_num
         for m in range(para_num):
-            exec()
+            for n in range(para_num):
+                if n == m:
+                    continue
+                else:
+                    avg_list[m] += padding_list[n]
 
+            temp_avg = avg_list[m] / 4
+            avg_list[m] = torch.sum(temp_avg,dim=0)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        """
+        计算每个段落的softmax，生成权重w和b，假设所有段落共享这两个参数
+        """
+        # 初始化参数
+        w = torch.randn((batch_size, hidden_size))
+        b = torch.randn((vocab_size))
 
 
 
