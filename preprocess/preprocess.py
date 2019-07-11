@@ -61,19 +61,17 @@ class BertData():
             1. 计算j%2的余数，如果为0，则值为0，否则就是1
             2. 根据当前token的个数分配
             """
-            if (j%2) == 0:
+            if (j % 2) == 0:
                 segment_ids += [0] * len(new_sent_token)
             else:
                 segment_ids += [1] * len(new_sent_token)
 
-        # 处理tgt:
-        tgt_token = self.tokenizer.tokenize(tgt)
-        tgt_tokens = self.conver_tgt_to_ids(tgt_token)
+        # create vocabulary
+        self.vocab = self.create_vocabulary(src_lists, tgt)
 
-        return src_tokens, segment_ids, tgt_tokens
+        return src_tokens, segment_ids
 
-    def create_vocabulary(self,src,tgt):
-        sent_lists = nltk.sent_tokenize(src)
+    def create_vocabulary(self, sent_lists, tgt):
         for sent in sent_lists:
             word_lists = nltk.word_tokenize(sent)
             for word in word_lists:
@@ -90,7 +88,7 @@ class BertData():
                 self.vocab.append(t_word)
         return self.vocab
 
-    def conver_tgt_to_ids(self,tgt):
+    def convert_tgt_to_ids(self, tgt):
         tgt_tokens = []
         for i in range(len(tgt)):
             token = tgt[i]
@@ -119,24 +117,30 @@ def format_to_bert(args):
         for item in item_list:
             src = item['src_txt']
             tgt = item['tgt_txt']
-            if bert_data.preprocess(src,tgt) is not None:
-                src_tokens, segment_ids, tgt_tokens = bert_data.preprocess(src, tgt)
-                item['src'] = src_tokens
-                item['segs'] = segment_ids
-                item['tgt'] = tgt_tokens
+            src_tokens, segment_ids = bert_data.preprocess(src, tgt)
+            item['src'] = src_tokens
+            item['segs'] = segment_ids
 
-            # 调用create vocabulary
-            vocabulary = bert_data.create_vocabulary(src,tgt)
-
-    torch.save(raw_lists,args.dataset_file)
-
-    print(vocabulary)
+    vocabulary = bert_data.vocab
+    vocabulary.sort()
     torch.save(vocabulary, args.vocab_file)
 
+    # 处理tgt:
+    for i in range(len(raw_lists)):
+        item_list = raw_lists[i]['segment']
+        print('{}: item_list_len:{}'.format(i, len(item_list)))
+        for item in item_list:
+            src = item['src_txt']
+            tgt = item['tgt_txt']
+            tgt_token = nltk.word_tokenize(tgt)
+            tgt_tokens = bert_data.convert_tgt_to_ids(tgt_token)
+            item['tgt'] = tgt_tokens
+
+    torch.save(raw_lists, args.dataset_file)
     gc.collect()
 
 
-def load_data(src_file,tgt_file):
+def load_data(src_file, tgt_file):
     """
     将raw_txt整合成后续可处理的列表嵌套字典的格式
     :param src_file: src.txt
@@ -144,17 +148,18 @@ def load_data(src_file,tgt_file):
     :return: raw_lists
     """
     raw_lists = []
-    item_lists = []
     item_flag = 0
     tgt_f = open(tgt_file, 'r', errors='ignore')
 
-    with open(src_file,'r',errors='ignore') as src_f:
+    with open(src_file, 'r', errors='ignore') as src_f:
+        item_lists = []
         for line in src_f.readlines():
             if line.count('\n') == len(line):
                 if item_flag == 0:
                     item_flag = 1
                     item_dict = {"segment": item_lists}
                     raw_lists.append(item_dict)
+                    item_lists = []
                     continue
                 else:
                     continue
@@ -163,8 +168,12 @@ def load_data(src_file,tgt_file):
                 raw_src = line.strip()
                 try:
                     raw_tgt = next(tgt_f)
+                    if raw_tgt.count('\n') == len(raw_tgt):
+                        raw_tgt = next(tgt_f)
+                        if raw_tgt.count('\n') == len(raw_tgt):
+                            raw_tgt = next(tgt_f)
                     raw_tgt = raw_tgt.strip()
-                    raw_dict = {"src_txt":raw_src, "tgt_txt":raw_tgt}
+                    raw_dict = {"src_txt": raw_src, "tgt_txt": raw_tgt}
                     item_lists.append(raw_dict)
                 except Exception as e:
                     break
@@ -174,9 +183,9 @@ def load_data(src_file,tgt_file):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-dataset_file",default='multi_heading.pt')
+    parser.add_argument("-dataset_file", default='multi_heading.pt')
     parser.add_argument("-vocab_file", default='vocab.pt')
-    parser.add_argument("-src_file",default='src.txt')
+    parser.add_argument("-src_file", default='src.txt')
     parser.add_argument("-tgt_file", default='tgt.txt')
 
     args = parser.parse_args()
