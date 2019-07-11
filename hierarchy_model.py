@@ -16,19 +16,6 @@ input_size = hidden_size =encoder_layer.hidden_size
 encoder中的hidden_state即为input,decoder中的hidden_state=None
 它不需要hidden_state
 由于output的shape为(seq_len,batch_size,hidden_size)
-假设有N个标题，则对应N个Decoder，其所对应的seq_len（word的个数）也不同
-想法是：seq_len对齐后，进行相加，
-然后使用torch.sum(x,dim=0)可以变成shape(batch_size,hidden_size)
-
-3. softmax
-P = softmax(wx+b)
-根据vocab_size，可以得到W的shape为(vocab_size, hidden_size)
-x的shape应为（batch,hidden_size)
-b的shape为[vocab_size]
-初始化可以采用截断正态分布
-y = torch.nn.functional.linear(input=x,weight = W，bias=b)
-y的shape为(batch_size,vocab_size)
-res = torch.nn.funcational.linear(y)
 """
 
 
@@ -61,22 +48,15 @@ class Summarizer(nn.Module):
         :return:
         """
         # Create Encoder，计算一个
-        self.encoder.train()
-        para_tokens_tensor = torch.tensor([para_dict['src']])
-        para_segments_tensor = torch.tensor([para_dict['segs']])
+        self.encoder.eval()
+        para_tokens_tensor = torch.tensor([para_dict['src']]).cuda()
+        para_segments_tensor = torch.tensor([para_dict['segs']]).cuda()
 
-        encoded_output,_ = self.encoder(para_tokens_tensor,para_segments_tensor,output_all_encoded_layers=False)
+        self.encoded_output,_ = self.encoder(para_tokens_tensor,para_segments_tensor,output_all_encoded_layers=False)
 
         # send encoded_output into decoder
-        decoded_output,_ = self.decoder(encoded_output,h_0=None)
-
-        return decoded_output
-
+        self.encoded_output = torch.transpose(self.encoded_output,0,1)
+        self.decoded_output,_ = self.decoder(self.encoded_output)
 
 
-
-
-
-
-
-
+        return self.decoded_output

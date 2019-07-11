@@ -44,7 +44,7 @@ def padding_tensor(src_len,max_len):
     :return: zero_tensor
     """
     padding_len = max_len - src_len
-    zero_tensor = torch.tensor((), dtype=torch.float64)
+    zero_tensor = torch.tensor((), dtype=torch.float32)
     batch_size=1
     hidden_size=768
     zero_tensor = zero_tensor.new_zeros((padding_len, batch_size,hidden_size))
