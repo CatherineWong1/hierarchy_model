@@ -25,7 +25,7 @@ import torch.nn.functional as F
 
 
 class Summarizer(nn.Module):
-    def __init__(self, args, device):
+    def __init__(self, args, device,w,b):
         # 初始化模型，建立encoder和decoder
         super(Summarizer, self).__init__()
         if args.mode == "train":
@@ -35,7 +35,8 @@ class Summarizer(nn.Module):
         self.args = args
         # we choose same hiedden_size with bert embedding
         self.decoder = nn.GRU(input_size=768, hidden_size=768, num_layers=1)
-
+        self.w = w
+        self.b = b
         # make all of them to gpu
         # self.to(device)
 

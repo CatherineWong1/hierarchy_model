@@ -15,6 +15,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from hierarchy_model import Summarizer
 import random
+import os
 
 
 def get_maxlen(para_list):
@@ -65,6 +66,11 @@ def align_tgt(tgt):
         tgt = tgt[:10]
 
     return tgt
+
+
+def save_model(step, state_dict, model_file):
+    path = os.path.join(model_file, 'model_step_%d.pt' % step)
+    torch.save(state_dict,path)
 
 
 def train(args):
@@ -126,75 +132,83 @@ def train(args):
     """
     device = 'cpu'
     # torch.cuda.set_device(0)
-    model = Summarizer(args, device)
-    # random.shuffle(train_data)
-    for i in range(len(train_data)):
-        print("This is {} segment".format(i))
-        # 取出一个段落的标题
-        seg_dict = train_data[i]
-        para_list = seg_dict['segment']
-        # 针对一个segment计算softmax和loss
-        para_num = len(para_list)
-        max_len = get_maxlen(para_list)
+    model = Summarizer(args, device, w, b)
+    for iter in range(10):
+        random.shuffle(train_data)
+        for i in range(len(train_data)):
+            print("This is {} segment".format(i))
+            # 取出一个段落的标题
+            seg_dict = train_data[i]
+            para_list = seg_dict['segment']
+            # 针对一个segment计算softmax和loss
+            para_num = len(para_list)
+            max_len = get_maxlen(para_list)
 
-        # 对齐所有段落
-        padding_list = []
-        for j in range(para_num):
-            print("This is {} para".format(j))
-            para_dict = para_list[j]
-            src_len = len(para_dict['src'])
-            para_output = model(para_dict)
-            if src_len < max_len:
-                zero_tensor = padding_tensor(src_len, max_len)
-                para_tensor = torch.cat((para_output, zero_tensor), 0)
-                print(para_tensor.shape)
-                padding_list.append(para_tensor)
-            else:
-                print(para_output.shape)
-                padding_list.append(para_output)
-
-        # 将当前段落的output和其他所有段落tensor的均值加到一起,并sum成shape为(batch_size,hidden_size)
-        avg_list = []
-        for m in range(para_num):
-            temp_avg = torch.empty((max_len, batch_size, hidden_size))
-            for n in range(para_num):
-                if n == m:
-                    continue
+            # 对齐所有段落
+            padding_list = []
+            for j in range(para_num):
+                print("This is {} para".format(j))
+                para_dict = para_list[j]
+                src_len = len(para_dict['src'])
+                para_output = model(para_dict)
+                if src_len < max_len:
+                    zero_tensor = padding_tensor(src_len, max_len)
+                    para_tensor = torch.cat((para_output, zero_tensor), 0)
+                    print(para_tensor.shape)
+                    padding_list.append(para_tensor)
                 else:
-                    temp_avg += padding_list[n]
+                    print(para_output.shape)
+                    padding_list.append(para_output)
 
-            temp_avg = temp_avg / 4
-            avg = torch.sum(temp_avg, dim=0)
-            avg_list.append(avg)
-        # 计算loss，进行gradient
-        for j in range(para_num):
-            para_dict = para_list[j]
-            # 计算softmax
-            input_avg = avg_list[j]
-            linear_res = F.linear(input_avg, w, b)
-            softmax_res = F.softmax(linear_res, dim=1)
+            # 将当前段落的output和其他所有段落tensor的均值加到一起,并sum成shape为(batch_size,hidden_size)
+            avg_list = []
+            for m in range(para_num):
+                temp_avg = torch.empty((max_len, batch_size, hidden_size))
+                for n in range(para_num):
+                    if n == m:
+                        continue
+                    else:
+                        temp_avg += padding_list[n]
 
-            # 根据softmax选择top 10个单词，作为标题
-            top_res = torch.topk(softmax_res, 10)
-            title_index = top_res[1].reshape((10))
-            title_index = title_index.float()
+                temp_avg = temp_avg / 4
+                avg = torch.sum(temp_avg, dim=0)
+                avg_list.append(avg)
+            # 计算loss，进行gradient
+            for j in range(para_num):
+                para_dict = para_list[j]
+                # 计算softmax
+                input_avg = avg_list[j]
+                linear_res = F.linear(input_avg, w, b)
+                softmax_res = F.softmax(linear_res, dim=1)
 
-            # cross entropy
-            tgt = para_dict['tgt']
-            tgt = align_tgt(tgt)
-            tgt_tensor = torch.tensor(tgt, dtype=torch.float32)
-            temp_loss = loss_func(title_index, tgt_tensor)
-            loss += temp_loss
+                # 根据softmax选择top 10个单词，作为标题
+                top_res = torch.topk(softmax_res, 10)
+                title_index = top_res[1].reshape((10))
+                title_index = title_index.float()
 
-        # optimizer
-        loss = float(loss / para_num)
-        print("{}: loss {}".format(i, loss))
-        optimizer = optim.Adagrad([w, b], lr=lr)
-        optimizer.step()
+                # cross entropy
+                tgt = para_dict['tgt']
+                tgt = align_tgt(tgt)
+                tgt_tensor = torch.tensor(tgt, dtype=torch.float32)
+                temp_loss = loss_func(title_index, tgt_tensor)
+                loss += temp_loss
 
-        # checkpoint，根据iteration来计算
-    print("Finish train whole dataset")
-    print("loss is {}".format(loss))
+            # optimizer
+            loss = float(loss / para_num)
+            print("{}: loss {}".format(i, loss))
+            optimizer = optim.Adagrad(model.parameters(), lr=lr)
+            optimizer.zero_grad()
+            optimizer.step()
+
+            # checkpoint，根据iteration来计算
+        print("Finish train whole dataset")
+        print("loss is {}".format(loss))
+
+        # checkpoint，每1000 iteration保存一次
+        if (iter % 1000) == 0:
+            state_dict = model.state_dict()
+            save_model(iter, state_dict, args.model_file)
+
 
 
 def val(args):
@@ -225,6 +239,7 @@ if __name__ == '__main__':
     parser.add_argument("-vocab_file", default="./preprocess/vocab.pt")
     parser.add_argument("-learning_rate", default=0.001)
     parser.add_argument("-mode", default="train")
+    parser.add_argument("-model_file",default="./model_ckpt")
 
     args = parser.parse_args()
 
