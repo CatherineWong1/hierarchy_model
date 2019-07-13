@@ -18,28 +18,26 @@ encoder中的hidden_state即为input,decoder中的hidden_state=None
 由于output的shape为(seq_len,batch_size,hidden_size)
 """
 
-
 from pytorch_pretrained_bert import BertModel
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
 
-
 class Summarizer(nn.Module):
-    def __init__(self,args,device):
+    def __init__(self, args, device):
         # 初始化模型，建立encoder和decoder
         super(Summarizer, self).__init__()
         if args.mode == "train":
-            self.encoder = BertModel.from_pretrained('bert-base-cased')
+            self.encoder = BertModel.from_pretrained('bert-base-cased', cache_dir="./temp")
         elif args.mode == "eval":
             self.encoder = BertModel()
         self.args = args
         # we choose same hiedden_size with bert embedding
-        self.decoder = nn.GRU(input_size=768,hidden_size=768,num_layers=1)
+        self.decoder = nn.GRU(input_size=768, hidden_size=768, num_layers=1)
 
         # make all of them to gpu
-        self.to(device)
+        # self.to(device)
 
     def forward(self, para_dict):
         """
@@ -49,14 +47,15 @@ class Summarizer(nn.Module):
         """
         # Create Encoder，计算一个
         self.encoder.eval()
-        para_tokens_tensor = torch.tensor([para_dict['src']]).cuda()
-        para_segments_tensor = torch.tensor([para_dict['segs']]).cuda()
+        para_tokens_tensor = torch.tensor([para_dict['src']])
+        para_segments_tensor = torch.tensor([para_dict['segs']])
+        print(para_tokens_tensor)
+        print(para_segments_tensor)
 
-        self.encoded_output,_ = self.encoder(para_tokens_tensor,para_segments_tensor,output_all_encoded_layers=False)
+        self.encoded_output, _ = self.encoder(para_tokens_tensor, para_segments_tensor, output_all_encoded_layers=False)
 
         # send encoded_output into decoder
-        self.encoded_output = torch.transpose(self.encoded_output,0,1)
-        self.decoded_output,_ = self.decoder(self.encoded_output)
-
+        self.encoded_output = torch.transpose(self.encoded_output, 0, 1)
+        self.decoded_output, _ = self.decoder(self.encoded_output)
 
         return self.decoded_output

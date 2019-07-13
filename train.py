@@ -36,7 +36,7 @@ def get_maxlen(para_list):
     return max_len
 
 
-def padding_tensor(src_len,max_len):
+def padding_tensor(src_len, max_len):
     """
     创建需要padding的tensor
     :param src_len: 当前段落的seq_len
@@ -45,10 +45,26 @@ def padding_tensor(src_len,max_len):
     """
     padding_len = max_len - src_len
     zero_tensor = torch.tensor((), dtype=torch.float32)
-    batch_size=1
-    hidden_size=768
-    zero_tensor = zero_tensor.new_zeros((padding_len, batch_size,hidden_size))
+    batch_size = 1
+    hidden_size = 768
+    zero_tensor = zero_tensor.new_zeros((padding_len, batch_size, hidden_size))
     return zero_tensor
+
+
+def align_tgt(tgt):
+    """
+    对齐gold summary和generate title
+    小于10则补齐，大于10则截断
+    :param tgt: gold summary在vocabulary中的Index
+    :return:
+    """
+    if len(tgt) < 10:
+        pad_len = 10 - len(tgt)
+        tgt += [0] * pad_len
+    else:
+        tgt = tgt[:10]
+
+    return tgt
 
 
 def train(args):
@@ -96,22 +112,24 @@ def train(args):
     vocab_size = len(vocab)
 
     # 初始化参数
-    w = torch.randn((batch_size, hidden_size), requires_grad=True)
+    w = torch.randn((vocab_size, hidden_size), requires_grad=True)
     b = torch.randn((vocab_size), requires_grad=True)
     # 初始化loss,设定loss的返回时scalar
-    loss_func = nn.BCELoss(reduction='none')
+    # loss_func = nn.BCELoss(reduction='none')
+    loss_func = nn.SoftMarginLoss()
     loss = 0
-
 
     """
     batch_size应该等于1，因为bert的output的shap为（batch_size, sequence_length, hidden_size)
     我们采用的不同段落进行输入，无法使用一个batch_size中多个segment进行训练。
     因此
     """
-    device = 'cuda'
-    model = Summarizer(args,device)
-    random.shuffle(train_data)
+    device = 'cpu'
+    # torch.cuda.set_device(0)
+    model = Summarizer(args, device)
+    # random.shuffle(train_data)
     for i in range(len(train_data)):
+        print("This is {} segment".format(i))
         # 取出一个段落的标题
         seg_dict = train_data[i]
         para_list = seg_dict['segment']
@@ -122,52 +140,61 @@ def train(args):
         # 对齐所有段落
         padding_list = []
         for j in range(para_num):
+            print("This is {} para".format(j))
             para_dict = para_list[j]
             src_len = len(para_dict['src'])
             para_output = model(para_dict)
             if src_len < max_len:
                 zero_tensor = padding_tensor(src_len, max_len)
                 para_tensor = torch.cat((para_output, zero_tensor), 0)
+                print(para_tensor.shape)
                 padding_list.append(para_tensor)
             else:
+                print(para_output.shape)
                 padding_list.append(para_output)
 
         # 将当前段落的output和其他所有段落tensor的均值加到一起,并sum成shape为(batch_size,hidden_size)
-        avg_list = [0] * para_num
+        avg_list = []
         for m in range(para_num):
+            temp_avg = torch.empty((max_len, batch_size, hidden_size))
             for n in range(para_num):
                 if n == m:
                     continue
                 else:
-                    avg_list[m] += padding_list[n]
+                    temp_avg += padding_list[n]
 
-            temp_avg = avg_list[m] / 4
-            avg_list[m] = torch.sum(temp_avg,dim=0)
-
+            temp_avg = temp_avg / 4
+            avg = torch.sum(temp_avg, dim=0)
+            avg_list.append(avg)
         # 计算loss，进行gradient
         for j in range(para_num):
             para_dict = para_list[j]
             # 计算softmax
-            input = avg_list[j]
-            linear_res = F.linear(input, w, b)
-            softmax_res = F.softmax(linear_res)
+            input_avg = avg_list[j]
+            linear_res = F.linear(input_avg, w, b)
+            softmax_res = F.softmax(linear_res, dim=1)
 
-            # 根据softmax选择top 5个单词，作为标题
-            top_res = torch.topk(softmax_res, 5)
-            title_index = top_res[1]
+            # 根据softmax选择top 10个单词，作为标题
+            top_res = torch.topk(softmax_res, 10)
+            title_index = top_res[1].reshape((10))
+            title_index = title_index.float()
 
             # cross entropy
             tgt = para_dict['tgt']
-            tgt_tensor = torch.tensor(tgt,dtype=torch.float64)
-            loss_func = (title_index,tgt_tensor)
-            loss += loss_func
+            tgt = align_tgt(tgt)
+            tgt_tensor = torch.tensor(tgt, dtype=torch.float32)
+            temp_loss = loss_func(title_index, tgt_tensor)
+            loss += temp_loss
 
         # optimizer
-        loss = float(loss/para_num)
-        optimizer = optim.Adagrad([w,b],lr=lr)
-        optimizer.step(loss)
+        loss = float(loss / para_num)
+        print("{}: loss {}".format(i, loss))
+        optimizer = optim.Adagrad([w, b], lr=lr)
+        optimizer.step()
 
         # checkpoint，根据iteration来计算
+    print("Finish train whole dataset")
+    print("loss is {}".format(loss))
 
 
 def val(args):
@@ -177,7 +204,6 @@ def val(args):
     :return:
     """
     print("valdidation function")
-
 
 
 def predict(args):
@@ -193,13 +219,12 @@ def predict(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-batch_size",default=64, type=int)
-    parser.add_argument("-iterations", default=10000,type=int)
-    parser.add_argument("-lstm_unit", default=128, type=int)
-    parser.add_argument("-train_file", default="multi_heading.pt")
-    parser.add_argument("-vocab_file",default="vocab.pt")
-    parser.add_argument("-learning_rate",default=0.001)
-    parser.add_argument("-mode",default="train")
+    parser.add_argument("-batch_size", default=1, type=int)
+    parser.add_argument("-iterations", default=10000, type=int)
+    parser.add_argument("-train_file", default="./preprocess/multi_heading.pt")
+    parser.add_argument("-vocab_file", default="./preprocess/vocab.pt")
+    parser.add_argument("-learning_rate", default=0.001)
+    parser.add_argument("-mode", default="train")
 
     args = parser.parse_args()
 
@@ -210,3 +235,4 @@ if __name__ == '__main__':
         val(args)
     elif mode == "predict":
         predict(args)
+

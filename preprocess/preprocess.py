@@ -22,7 +22,7 @@ from pytorch_pretrained_bert import BertTokenizer
 
 class BertData():
     def __init__(self):
-        self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
         # 得到wordPiece中sep,cls,pad对应的id值
         self.sep_vid = self.tokenizer.vocab['[SEP]']
         self.cls_vid = self.tokenizer.vocab['[CLS]']
@@ -46,12 +46,13 @@ class BertData():
         src_tokens = []
         segment_ids = []
         cls_ids = []
+        val_token = []
         for j in range(len(src_lists)):
             """"""
             sent = src_lists[j]
             sent_token = self.tokenizer.tokenize(sent)
             new_sent_token = ['[CLS]'] + sent_token + ['[SEP]']
-
+            val_token += new_sent_token
             new_sent_token_idxs = self.tokenizer.convert_tokens_to_ids(new_sent_token)
             src_tokens += new_sent_token_idxs
 
@@ -61,13 +62,14 @@ class BertData():
             1. 计算j%2的余数，如果为0，则值为0，否则就是1
             2. 根据当前token的个数分配
             """
-            if (j % 2) == 0:
+            if (j%2) == 0:
                 segment_ids += [0] * len(new_sent_token)
             else:
                 segment_ids += [1] * len(new_sent_token)
 
         # create vocabulary
         self.vocab = self.create_vocabulary(src_lists, tgt)
+        
 
         return src_tokens, segment_ids
 
@@ -117,7 +119,7 @@ def format_to_bert(args):
         for item in item_list:
             src = item['src_txt']
             tgt = item['tgt_txt']
-            src_tokens, segment_ids = bert_data.preprocess(src, tgt)
+            src_tokens, segment_ids = bert_data.preprocess(src,tgt)
             item['src'] = src_tokens
             item['segs'] = segment_ids
 
@@ -128,7 +130,7 @@ def format_to_bert(args):
     # 处理tgt:
     for i in range(len(raw_lists)):
         item_list = raw_lists[i]['segment']
-        print('{}: item_list_len:{}'.format(i, len(item_list)))
+        print('{}: item_list_len:{}'.format(i,len(item_list)))
         for item in item_list:
             src = item['src_txt']
             tgt = item['tgt_txt']
@@ -140,7 +142,7 @@ def format_to_bert(args):
     gc.collect()
 
 
-def load_data(src_file, tgt_file):
+def load_data(src_file,tgt_file):
     """
     将raw_txt整合成后续可处理的列表嵌套字典的格式
     :param src_file: src.txt
@@ -151,7 +153,7 @@ def load_data(src_file, tgt_file):
     item_flag = 0
     tgt_f = open(tgt_file, 'r', errors='ignore')
 
-    with open(src_file, 'r', errors='ignore') as src_f:
+    with open(src_file,'r',errors='ignore') as src_f:
         item_lists = []
         for line in src_f.readlines():
             if line.count('\n') == len(line):
@@ -173,22 +175,23 @@ def load_data(src_file, tgt_file):
                         if raw_tgt.count('\n') == len(raw_tgt):
                             raw_tgt = next(tgt_f)
                     raw_tgt = raw_tgt.strip()
-                    raw_dict = {"src_txt": raw_src, "tgt_txt": raw_tgt}
+                    raw_dict = {"src_txt":raw_src, "tgt_txt":raw_tgt}
                     item_lists.append(raw_dict)
                 except Exception as e:
                     break
-
+ 
     return raw_lists
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-dataset_file", default='multi_heading.pt')
+    parser.add_argument("-dataset_file",default='multi_heading.pt')
     parser.add_argument("-vocab_file", default='vocab.pt')
-    parser.add_argument("-src_file", default='src.txt')
+    parser.add_argument("-src_file",default='src.txt')
     parser.add_argument("-tgt_file", default='tgt.txt')
 
     args = parser.parse_args()
 
     format_to_bert(args)
+
 
