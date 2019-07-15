@@ -60,7 +60,7 @@ def train(args):
             contrast_list = model(seg_dict)
             # # 取出contrast_list中的每一个item，进行Loss计算
             for j in range(len(contrast_list)):
-                contrast_dict = contrast_list
+                contrast_dict = contrast_list[j]
                 title_index = contrast_dict['gen']
                 tgt_tensor = contrast_dict['tgt']
 
@@ -81,9 +81,10 @@ def train(args):
         print("loss is {}".format(loss))
 
         # checkpoint，每1000 iteration保存一次
-        if (iter % 1000) == 0:
+        iteration = iter + 1
+        if (iteration % 1000) == 0:
             state_dict = model.state_dict()
-            save_model(iter, state_dict, args.model_file)
+            save_model(iteration, state_dict, args.model_file)
 
 def val(args):
     """

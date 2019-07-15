@@ -44,8 +44,8 @@ class Summarizer(nn.Module):
         # 初始化参数
         self.vocab_size = len(torch.load(args.vocab_file))
         self.hidden_size = 768
-        w = torch.randn((self.vocab_size, self.hidden_size), requires_grad=True)
-        b = torch.randn((self.vocab_size), requires_grad=True)
+        self.w = torch.randn((self.vocab_size, self.hidden_size), requires_grad=True)
+        self.b = torch.randn((self.vocab_size), requires_grad=True)
 
         # make all of them to gpu
         # self.to(device)
@@ -62,7 +62,6 @@ class Summarizer(nn.Module):
         max_len = get_maxlen(para_list)
         padding_list = []
         for j in range(para_num):
-            print("This is {} para".format(j))
             para_dict = para_list[j]
             src_len = len(para_dict['src'])
             para_output = self.single_para_model(para_dict)
@@ -100,7 +99,7 @@ class Summarizer(nn.Module):
             # 根据softmax选择top 10个单词，作为标题，并组成数据
             top_res = torch.topk(softmax_res, 10)
             title_index = top_res[1].reshape((10))
-            contrast_dict['gen'] = title_index
+            contrast_dict['gen'] = title_index.float()
 
             goal_tgt = para_dict['tgt']
             pad_goal_tgt = align_tgt(goal_tgt)
@@ -115,8 +114,6 @@ class Summarizer(nn.Module):
     def single_para_model(self,para_dict):
         para_tokens_tensor = torch.tensor([para_dict['src']])
         para_segments_tensor = torch.tensor([para_dict['segs']])
-        print(para_tokens_tensor)
-        print(para_segments_tensor)
 
         self.encoded_output, _ = self.encoder(para_tokens_tensor, para_segments_tensor, output_all_encoded_layers=False)
 
