@@ -2,6 +2,7 @@
 """
 Author: wangqing
 Date: 20190705
+Version:1.0
 实现模型的训练：
 需要人为设置的参数:
 1. 数据：训练数据：multi_heading.pt, 词典数据：vocab.pt
@@ -16,7 +17,7 @@ import torch.optim as optim
 from hierarchy_model import Summarizer
 import random
 import os
-
+from pytorch_pretrained_bert import BertConfig
 
 def get_maxlen(para_list):
     """
@@ -132,7 +133,7 @@ def train(args):
     """
     device = 'cpu'
     # torch.cuda.set_device(0)
-    model = Summarizer(args, device, w, b)
+    model = Summarizer(args, device, w=w, b=b)
     for iter in range(10):
         random.shuffle(train_data)
         for i in range(len(train_data)):
@@ -220,15 +221,31 @@ def val(args):
     print("valdidation function")
 
 
-def predict(args):
+def test(args):
     """
     具体做法：
     1. load checkpoint
-    2. 将
+    2. 载入测试数据，为每个段落产生标题
+    3. 计算loss
+    4. 将标题ID 转换成对应的文字
+    但是这个版本
     :param args:
     :return:
     """
-    print("predict function")
+    # load checkpoint
+    device = "cpu"
+    checkpoint = torch.load(args.checkpoint)
+    model = Summarizer(args, device)
+    model.load_state_dict(checkpoint)
+    model.eval()
+
+    # load test data
+    test_data = torch.load(args.test_file)
+    """
+    当前版本的代码由于相关参数都是在train函数中，如果在进行test时，不知如何使用
+    因此此段代码的相关实现放入Version 2.0 中
+    """
+
 
 
 if __name__ == '__main__':
@@ -236,10 +253,13 @@ if __name__ == '__main__':
     parser.add_argument("-batch_size", default=1, type=int)
     parser.add_argument("-iterations", default=10000, type=int)
     parser.add_argument("-train_file", default="./preprocess/multi_heading.pt")
+    parser.add_argument("-test_file",default="./preprocess/multi_test.pt")
     parser.add_argument("-vocab_file", default="./preprocess/vocab.pt")
     parser.add_argument("-learning_rate", default=0.001)
     parser.add_argument("-mode", default="train")
     parser.add_argument("-model_file",default="./model_ckpt")
+    parser.add_argument("-checkpoint", default="./model_ckpt/model_step_5000.ckpt")
+    parser.add_argument("-predict_config",default="./bert_config.json")
 
     args = parser.parse_args()
 
@@ -248,6 +268,6 @@ if __name__ == '__main__':
         train(args)
     elif mode == "val":
         val(args)
-    elif mode == "predict":
-        predict(args)
+    elif mode == "test":
+        test(args)
 

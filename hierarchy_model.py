@@ -2,6 +2,7 @@
 """
 Author:wangqing
 Date: 20190707
+Version：1.3
 实现模型的建立，模型具体细节：
 1. Encoder部分
 由于各个段落的长度不一致，因此分别将各个段落送入BertModel中
@@ -18,25 +19,27 @@ encoder中的hidden_state即为input,decoder中的hidden_state=None
 由于output的shape为(seq_len,batch_size,hidden_size)
 """
 
-from pytorch_pretrained_bert import BertModel
+from pytorch_pretrained_bert import BertModel,BertConfig
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
 
 class Summarizer(nn.Module):
-    def __init__(self, args, device,w,b):
+    def __init__(self, args, w=None, b=None):
         # 初始化模型，建立encoder和decoder
         super(Summarizer, self).__init__()
         if args.mode == "train":
             self.encoder = BertModel.from_pretrained('bert-base-cased', cache_dir="./temp")
-        elif args.mode == "eval":
-            self.encoder = BertModel()
+            self.w = w
+            self.b = b
+        elif args.mode == "test":
+            config = BertConfig.from_json_file(args.predict_config)
+            self.encoder = BertModel(config)
         self.args = args
         # we choose same hiedden_size with bert embedding
         self.decoder = nn.GRU(input_size=768, hidden_size=768, num_layers=1)
-        self.w = w
-        self.b = b
+
         # make all of them to gpu
         # self.to(device)
 
@@ -47,7 +50,7 @@ class Summarizer(nn.Module):
         :return:
         """
         # Create Encoder，计算一个
-        self.encoder.eval()
+        #self.encoder.eval()
         para_tokens_tensor = torch.tensor([para_dict['src']])
         para_segments_tensor = torch.tensor([para_dict['segs']])
         print(para_tokens_tensor)
