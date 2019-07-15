@@ -18,7 +18,6 @@ import random
 import os
 
 
-
 def save_model(step, state_dict, model_file):
     path = os.path.join(model_file, 'model_step_%d.pt' % step)
     torch.save(state_dict,path)
@@ -42,11 +41,6 @@ def train(args):
     train_file = args.train_file
     train_data = torch.load(train_file)
 
-    # 初始化loss,设定loss的返回时scalar
-    # loss_func = nn.BCELoss(reduction='none')
-    loss_func = nn.SoftMarginLoss()
-    loss = 0
-
     """
     batch_size应该等于1，因为bert的output的shap为（batch_size, sequence_length, hidden_size)
     我们采用的不同段落进行输入，无法使用一个batch_size中多个segment进行训练。
@@ -58,27 +52,27 @@ def train(args):
         for i in range(len(train_data)):
             seg_dict = train_data[i]
             contrast_list = model(seg_dict)
-            # # 取出contrast_list中的每一个item，进行Loss计算
+            # 取出contrast_list中的每一个item，进行Loss计算
             for j in range(len(contrast_list)):
                 contrast_dict = contrast_list[j]
                 title_index = contrast_dict['gen']
                 tgt_tensor = contrast_dict['tgt']
 
                 # cross entropy
-                temp_loss = loss_func(title_index, tgt_tensor)
-                loss += temp_loss
+                temp_loss = model.loss_func(title_index, tgt_tensor)
+                model.loss += temp_loss
 
             # optimizer
             para_num = len(contrast_list)
-            loss = float(loss / para_num)
-            print("{}: loss {}".format(i, loss))
+            model.loss = float(model.loss / para_num)
+            print("{}: loss {}".format(i, model.loss))
             optimizer = optim.Adagrad(model.parameters(), lr=lr)
             optimizer.zero_grad()
             optimizer.step()
 
             # checkpoint，根据iteration来计算
         print("Finish train whole dataset")
-        print("loss is {}".format(loss))
+        print("loss is {}".format(model.loss))
 
         # checkpoint，每1000 iteration保存一次
         iteration = iter + 1
@@ -114,8 +108,23 @@ def test(args):
 
     # load test data
     test_data = torch.load(args.test_file)
+    with torch.no_grad:
+        for i in range(len(test_data)):
+            seg_dict = test_data[i]
+            contrast_list = model(seg_dict)
+            # 取出contrast_list中的每一个item，进行Loss计算
+            for j in range(len(contrast_list)):
+                contrast_dict = contrast_list[j]
+                title_index = contrast_dict['gen']
+                tgt_tensor = contrast_dict['tgt']
 
-
+                model.loss = model.loss_func(title_index,tgt_tensor)
+                print("The loss in test phase is {}".format(model.loss))
+                # 将生成的title和目标title进行打印
+                gen_title = model.convert_idx_to_word(title_index)
+                print("Generate title is {}".format(gen_title))
+                raw_tgt = seg_dict['segment'][j]['tgt_txt']
+                print("The goal title is {}".format(raw_tgt))
 
 
 

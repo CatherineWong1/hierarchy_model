@@ -42,10 +42,13 @@ class Summarizer(nn.Module):
         self.decoder = nn.GRU(input_size=768, hidden_size=768, num_layers=1)
 
         # 初始化参数
-        self.vocab_size = len(torch.load(args.vocab_file))
+        self.vocab = torch.load(args.vocab_file)
+        self.vocab_size = len(self.vocab)
         self.hidden_size = 768
         self.w = torch.randn((self.vocab_size, self.hidden_size), requires_grad=True)
         self.b = torch.randn((self.vocab_size), requires_grad=True)
+        self.loss_func = nn.SoftMarginLoss()
+        self.loss = 0
 
         # make all of them to gpu
         # self.to(device)
@@ -122,6 +125,19 @@ class Summarizer(nn.Module):
         self.decoded_output, _ = self.decoder(self.encoded_output)
 
         return self.decoded_output
+
+    def conver_idx_to_word(self, title_index):
+        # 转换title_index成list
+        word_list = []
+        vocab = self.vocab
+        word_indicies = title_index.cpu().numpy().tolist()
+        for i in range(len(word_indicies)):
+            index = word_indicies[i]
+            word = vocab[index]
+            word_list.append(word)
+
+        title = ' '.join(word_list)
+        return title
 
 
 def get_maxlen(para_list):
