@@ -31,25 +31,25 @@ tgt.txt格式：
 根据Mode，选择BertModel的函数。
 
 3. Model
-Encoder的部分：
+3.1 Encoder的部分：
 将Embedding送入Bert,重新得到的向量可视为Encoder出来的向量。
 假设有N行文字，则需要得到N个Bert张量，对于当前张量，将当前张量和其余向量的均值concatenate到一起。
 重复N次，重新获得N个张量，随后将张量送入Decoder中。
 
-Decoder部分：
+3.2 Decoder部分：
 送入一层LSTM，768个Unit即可。得到最终的结果
 
-softmax
+3.3 softmax
 Pvoc = softmax(wx+b)，x即Decoder output出来的张量，w,b都是需要学习的参数
 由于是生成式的，而且长度有限制，也不需要逐个step去生成，因此直接选择top k个distribution来组成新的标题。
 
 
-loss
+3.4 loss
 使用softmarginloss
 求出N个向量对应的标题及其gold standard的标题，并进行loss计算
 最后得到一个均值作为loss
 
-optimizer
+3.5 optimizer
 Adagrad
 
 
