@@ -1,13 +1,13 @@
 # two_level_sim
 整体模型设计思路：
-1. Data Preprocess
-所针对的数据：
-1. 标题内容
+**1. Data Preprocess**
+所针对的数据格式：
+{1. 标题内容 
 1.1 标题内容
 1.1.1 标题内容
 1.1.2 标题内容
 1.2 标题内容
-1.3 .......
+1.3 .......}
 数据预处理之数据集：
 src.txt格式：
 文字行：一个标题下面的所有内容（包括分段的内容）
@@ -37,7 +37,7 @@ Encoder的部分：
 重复N次，重新获得N个张量，随后将张量送入Decoder中。
 
 Decoder部分：
-送入一层LSTM，128个Unit即可。得到最终的结果
+送入一层LSTM，768个Unit即可。得到最终的结果
 
 softmax
 Pvoc = softmax(wx+b)，x即Decoder output出来的张量，w,b都是需要学习的参数
@@ -45,12 +45,8 @@ Pvoc = softmax(wx+b)，x即Decoder output出来的张量，w,b都是需要学习
 
 
 loss
-使用cross entropy
-方案一：
-对生成的一级标题和gold standard的标题进行cross entropy
-
-方案二：
-求出N个向量对应的标题及其gold standard的标题，并进行cross entropy
+使用softmarginloss
+求出N个向量对应的标题及其gold standard的标题，并进行loss计算
 最后得到一个均值作为loss
 
 optimizer
