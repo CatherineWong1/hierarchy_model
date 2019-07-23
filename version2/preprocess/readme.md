@@ -44,7 +44,7 @@ Note:实际的src的数据是不会带标号的，这里只是为了形象说明
 		{
 			"heading": [{
 					"src_txt": 原文段落1,
-					"tgt_txt": 标题2,
+					"tgt_txt": 标题1.1,
 					"src": 原文对应的wordPiece id,
 					"segs": 原文对应的句子分隔,
 					"tgt": 标题对应的wordPiece id
@@ -61,7 +61,7 @@ Note:实际的src的数据是不会带标号的，这里只是为了形象说明
 		{
 			"heading": [{
 				"src_txt": 原文段落1,
-				"tgt_txt": 标题3,
+				"tgt_txt": 标题1.2,
 				"src": 原文对应的wordPiece id,
 				"segs": 原文对应的句子分隔,
 				"tgt": 标题对应的wordPiece id
