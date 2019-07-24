@@ -48,11 +48,12 @@ class BertData():
         cls_ids = []
         val_token = []
         for j in range(len(src_lists)):
-            """"""
             sent = src_lists[j]
             sent_token = self.tokenizer.tokenize(sent)
+            if len(sent_token) > 510:
+                sent_token = sent_token[:510]
             new_sent_token = ['[CLS]'] + sent_token + ['[SEP]']
-            val_token += new_sent_token
+            
             new_sent_token_idxs = self.tokenizer.convert_tokens_to_ids(new_sent_token)
             src_tokens += new_sent_token_idxs
 
@@ -67,6 +68,10 @@ class BertData():
             else:
                 segment_ids += [1] * len(new_sent_token)
 
+        # 截断整个段落的长度
+        if len(src_tokens) > 512:
+            src_tokens = src_tokens[:512]
+            segment_ids = segment_ids[:512]
         # create vocabulary
         self.vocab = self.create_vocabulary(src_lists, tgt)
         
@@ -115,6 +120,7 @@ def format_to_bert(args):
     raw_lists = load_data(src_file, tgt_file)
 
     for i in range(len(raw_lists)):
+        print("This is {} raw data".format(i))
         item_list = raw_lists[i]['segment']
         for item in item_list:
             src = item['src_txt']
@@ -193,5 +199,3 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     format_to_bert(args)
-
-
