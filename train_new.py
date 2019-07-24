@@ -16,6 +16,91 @@ import torch.optim as optim
 from hierarchy_model_new import Summarizer
 import random
 import os
+import distributed
+import signal
+import torchsnooper
+
+
+def multi_main(args):
+    """ Spawns 1 process per GPU """
+    nb_gpu = 2
+    # 封装了python自带的multiprocessing模块，若存在shared_memory,则可以将其发送给其他进程
+    # 下面的函数实现的是
+    mp = torch.multiprocessing.get_context('spawn')
+
+    # Create a thread to listen for errors in the child processes.
+    error_queue = mp.SimpleQueue()
+    error_handler = ErrorHandler(error_queue)
+
+    # Train with multiprocessing.
+    procs = []
+    for i in range(nb_gpu):
+        device_id = i
+        procs.append(mp.Process(target=run, args=(args, device_id, error_queue,), daemon=True))
+        procs[i].start()
+        print(" Starting process pid: %d  " % procs[i].pid)
+        error_handler.add_child(procs[i].pid)
+    for p in procs:
+        p.join()
+
+
+
+def run(args, device_id, error_queue):
+
+    """ run process """
+    args_gpu_ranks=[0,1]
+    world_size = 2
+    try:
+        gpu_rank = distributed.multi_init(device_id, world_size, args_gpu_ranks)
+        print('gpu_rank %d' %gpu_rank)
+        if gpu_rank != args_gpu_ranks[device_id]:
+            raise AssertionError("An error occurred in \
+                  Distributed initialization")
+
+        train(args,device_id)
+    except KeyboardInterrupt:
+        pass  # killed by parent, do nothing
+    except Exception:
+        # propagate exception to parent process, keeping original traceback
+        import traceback
+        error_queue.put((args_gpu_ranks[device_id], traceback.format_exc()))
+
+
+class ErrorHandler(object):
+    """A class that listens for exceptions in children processes and propagates
+    the tracebacks to the parent process."""
+
+    def __init__(self, error_queue):
+        """ init error handler """
+        import signal
+        import threading
+        self.error_queue = error_queue
+        self.children_pids = []
+        self.error_thread = threading.Thread(
+            target=self.error_listener, daemon=True)
+        self.error_thread.start()
+        signal.signal(signal.SIGUSR1, self.signal_handler)
+
+    def add_child(self, pid):
+        """ error handler """
+        self.children_pids.append(pid)
+
+    def error_listener(self):
+        """ error listener """
+        (rank, original_trace) = self.error_queue.get()
+        self.error_queue.put((rank, original_trace))
+        os.kill(os.getpid(), signal.SIGUSR1)
+
+    def signal_handler(self, signalnum, stackframe):
+        """ signal handler """
+        for pid in self.children_pids:
+            os.kill(pid, signal.SIGINT)  # kill children processes
+        (rank, original_trace) = self.error_queue.get()
+        msg = """\n\n-- Tracebacks above this line can probably
+                 be ignored --\n\n"""
+        msg += original_trace
+        raise Exception(msg)
+
 
 
 def save_model(step, state_dict, model_file):
@@ -34,6 +119,12 @@ def train(args):
     :param args: 从命令行传入的参数
     :return:
     """
+    #torch.backends.cudnn.deterministic = True
+
+    #if device_id >= 0:
+        #torch.cuda.set_device(device_id)
+
+
     lr = args.learning_rate
     iterations = args.iterations
 
@@ -47,38 +138,48 @@ def train(args):
     因此
     """
     model = Summarizer(args)
+    #model.to(args.device)
+    optimizer = optim.Adagrad(model.parameters(), lr=lr)
     for iter in range(iterations):
-        random.shuffle(train_data)
+        print("This is {} iteration **************".format(iter+1))
+        # random.shuffle(train_data)
+        whole_loss = 0
         for i in range(len(train_data)):
             seg_dict = train_data[i]
             contrast_list = model(seg_dict)
-            # 取出contrast_list中的每一个item，进行Loss计算
+            # 取出contrast_list中的每一个item，进行Loss计算，并进行Loss的更新
             for j in range(len(contrast_list)):
                 contrast_dict = contrast_list[j]
                 title_index = contrast_dict['gen']
                 tgt_tensor = contrast_dict['tgt']
+                # print(seg_dict['segment'][j]['tgt_txt'])
 
-                # cross entropy
-                temp_loss = model.loss_func(title_index, tgt_tensor)
-                model.loss += temp_loss
-
-            # optimizer
-            para_num = len(contrast_list)
-            model.loss = float(model.loss / para_num)
-            print("{}: loss {}".format(i, model.loss))
-            optimizer = optim.Adagrad(model.parameters(), lr=lr)
-            optimizer.zero_grad()
-            optimizer.step()
-
-            # checkpoint，根据iteration来计算
+                # calculate loss and update
+                title_index.requires_grad = True
+                para_loss = model.loss_func(title_index, tgt_tensor)
+            
+                # optimizer
+                para_loss.backward()
+                optimizer.zero_grad()
+                optimizer.step()
+                
+                # 计算加和
+                model.loss += para_loss
+           
+            print("The loss of {}th data is {}".format(i+1, model.loss))
+            whole_loss += model.loss
+                 
+        # checkpoint，根据iteration来计算
         print("Finish train whole dataset")
-        print("loss is {}".format(model.loss))
-
+        print("{} iteration loss is {}".format(iter + 1, whole_loss))
+    
         # checkpoint，每1000 iteration保存一次
         iteration = iter + 1
-        if (iteration % 1000) == 0:
-            state_dict = model.state_dict()
-            save_model(iteration, state_dict, args.model_file)
+        if (iteration % 100) == 0:
+             state_dict = model.state_dict()
+             save_model(iteration, state_dict, args.model_file)
+
+
 
 def val(args):
     """
@@ -131,23 +232,25 @@ def test(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-batch_size", default=1, type=int)
-    parser.add_argument("-iterations", default=10000, type=int)
+    parser.add_argument("-iterations", default=20, type=int)
     parser.add_argument("-train_file", default="./preprocess/multi_heading.pt")
     parser.add_argument("-test_file",default="./preprocess/multi_test.pt")
     parser.add_argument("-vocab_file", default="./preprocess/vocab.pt")
-    parser.add_argument("-learning_rate", default=0.001)
+    parser.add_argument("-learning_rate", default=0.01)
     parser.add_argument("-mode", default="train")
     parser.add_argument("-model_file",default="./model_ckpt")
     parser.add_argument("-checkpoint", default="./model_ckpt/model_step_5000.ckpt")
     parser.add_argument("-predict_config",default="./bert_config.json")
-
+    parser.add_argument("-device", default="cuda")
     args = parser.parse_args()
 
     mode = args.mode
     if mode == "train":
         train(args)
+        #multi_main(args)
     elif mode == "val":
         val(args)
     elif mode == "test":
         test(args)
+
 
