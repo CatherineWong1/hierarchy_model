@@ -26,6 +26,7 @@ from pytorch_pretrained_bert import BertModel, BertConfig
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
+import gc
 
 
 class Summarizer(nn.Module):
@@ -49,9 +50,10 @@ class Summarizer(nn.Module):
         self.b = torch.randn((self.vocab_size), requires_grad=True)
         self.loss_func = nn.SoftMarginLoss()
         self.loss = 0
+        self.device = args.device
 
         # make all of them to gpu
-        # self.to(device)
+        #self.to(self.device)
 
     def forward(self, seg_dict):
         """
@@ -115,14 +117,14 @@ class Summarizer(nn.Module):
 
 
     def single_para_model(self,para_dict):
-        para_tokens_tensor = torch.tensor([para_dict['src']])
-        para_segments_tensor = torch.tensor([para_dict['segs']])
-
-        self.encoded_output, _ = self.encoder(para_tokens_tensor, para_segments_tensor, output_all_encoded_layers=False)
+        self.para_tokens_tensor = torch.tensor([para_dict['src']])
+        self.para_segments_tensor = torch.tensor([para_dict['segs']])
+        self.encoded_output, _ = self.encoder(self.para_tokens_tensor, self.para_segments_tensor, output_all_encoded_layers=False)
 
         # send encoded_output into decoder
         self.encoded_output = torch.transpose(self.encoded_output, 0, 1)
         self.decoded_output, _ = self.decoder(self.encoded_output)
+        #self.to(self.device)
 
         return self.decoded_output
 
