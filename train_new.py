@@ -44,20 +44,18 @@ def multi_main(args):
         p.join()
 
 
-
 def run(args, device_id, error_queue):
-
     """ run process """
-    args_gpu_ranks=[0,1]
+    args_gpu_ranks = [0, 1]
     world_size = 2
     try:
         gpu_rank = distributed.multi_init(device_id, world_size, args_gpu_ranks)
-        print('gpu_rank %d' %gpu_rank)
+        print('gpu_rank %d' % gpu_rank)
         if gpu_rank != args_gpu_ranks[device_id]:
             raise AssertionError("An error occurred in \
                   Distributed initialization")
 
-        train(args,device_id)
+        train(args, device_id)
     except KeyboardInterrupt:
         pass  # killed by parent, do nothing
     except Exception:
@@ -102,10 +100,9 @@ class ErrorHandler(object):
         raise Exception(msg)
 
 
-
 def save_model(step, state_dict, model_file):
     path = os.path.join(model_file, 'model_step_%d.pt' % step)
-    torch.save(state_dict,path)
+    torch.save(state_dict, path)
 
 
 def train(args):
@@ -119,11 +116,10 @@ def train(args):
     :param args: 从命令行传入的参数
     :return:
     """
-    #torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.deterministic = True
 
-    #if device_id >= 0:
-        #torch.cuda.set_device(device_id)
-
+    # if device_id >= 0:
+    # torch.cuda.set_device(device_id)
 
     lr = args.learning_rate
     iterations = args.iterations
@@ -138,13 +134,17 @@ def train(args):
     因此
     """
     model = Summarizer(args)
-    #model.to(args.device)
-    optimizer = optim.Adagrad(model.parameters(), lr=lr)
+    # model.to(args.device)
+    # optimizer = optim.Adagrad(model.parameters(), lr=lr)
+    optimizer = model.optimizer
     for iter in range(iterations):
-        print("This is {} iteration **************".format(iter+1))
+        print("This is {} iteration **************".format(iter + 1))
         # random.shuffle(train_data)
         whole_loss = 0
         for i in range(len(train_data)):
+            if i != 1:
+                continue
+            model.loss = 0
             seg_dict = train_data[i]
             contrast_list = model(seg_dict)
             # 取出contrast_list中的每一个item，进行Loss计算，并进行Loss的更新
@@ -155,30 +155,39 @@ def train(args):
                 # print(seg_dict['segment'][j]['tgt_txt'])
 
                 # calculate loss and update
-                title_index.requires_grad = True
+                # title_index.requires_grad = True
+                print(title_index)
+                print(tgt_tensor)
                 para_loss = model.loss_func(title_index, tgt_tensor)
-            
-                # optimizer
-                para_loss.backward()
-                optimizer.zero_grad()
-                optimizer.step()
-                
+
                 # 计算加和
                 model.loss += para_loss
-           
-            print("The loss of {}th data is {}".format(i+1, model.loss))
+                # optimizer.zero_grad()
+                # para_loss.backward()
+                # optimizer.step()
+
+                # print(para_loss.grad)
+
+                # model.loss += para_loss
+
+            # optimizer
+            optimizer.zero_grad()
+            model.loss.backward()
+            optimizer.step()
+
+            # print(model.loss)
+
+            print("The loss of {}th data is {}".format(i + 1, model.loss))
             whole_loss += model.loss
-                 
-        # checkpoint，根据iteration来计算
+            # checkpoint，根据iteration来计算
         print("Finish train whole dataset")
         print("{} iteration loss is {}".format(iter + 1, whole_loss))
-    
+
         # checkpoint，每1000 iteration保存一次
         iteration = iter + 1
         if (iteration % 100) == 0:
-             state_dict = model.state_dict()
-             save_model(iteration, state_dict, args.model_file)
-
+            state_dict = model.state_dict()
+            save_model(iteration, state_dict, args.model_file)
 
 
 def val(args):
@@ -219,7 +228,7 @@ def test(args):
                 title_index = contrast_dict['gen']
                 tgt_tensor = contrast_dict['tgt']
 
-                model.loss = model.loss_func(title_index,tgt_tensor)
+                model.loss = model.loss_func(title_index, tgt_tensor)
                 print("The loss in test phase is {}".format(model.loss))
                 # 将生成的title和目标title进行打印
                 gen_title = model.convert_idx_to_word(title_index)
@@ -228,29 +237,26 @@ def test(args):
                 print("The goal title is {}".format(raw_tgt))
 
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-batch_size", default=1, type=int)
     parser.add_argument("-iterations", default=20, type=int)
     parser.add_argument("-train_file", default="./preprocess/multi_heading.pt")
-    parser.add_argument("-test_file",default="./preprocess/multi_test.pt")
+    parser.add_argument("-test_file", default="./preprocess/multi_test.pt")
     parser.add_argument("-vocab_file", default="./preprocess/vocab.pt")
-    parser.add_argument("-learning_rate", default=0.01)
+    parser.add_argument("-learning_rate", default=0.1)
     parser.add_argument("-mode", default="train")
-    parser.add_argument("-model_file",default="./model_ckpt")
+    parser.add_argument("-model_file", default="./model_ckpt")
     parser.add_argument("-checkpoint", default="./model_ckpt/model_step_5000.ckpt")
-    parser.add_argument("-predict_config",default="./bert_config.json")
+    parser.add_argument("-predict_config", default="./bert_config.json")
     parser.add_argument("-device", default="cuda")
     args = parser.parse_args()
 
     mode = args.mode
     if mode == "train":
         train(args)
-        #multi_main(args)
+        # multi_main(args)
     elif mode == "val":
         val(args)
     elif mode == "test":
         test(args)
-
-

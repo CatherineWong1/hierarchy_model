@@ -27,6 +27,7 @@ import torch.nn as nn
 import torch
 import torch.nn.functional as F
 import gc
+import torch.optim as optim
 
 
 class Summarizer(nn.Module):
@@ -48,13 +49,14 @@ class Summarizer(nn.Module):
         self.hidden_size = 768
         self.w = torch.randn((self.vocab_size, self.hidden_size), requires_grad=True)
         self.b = torch.randn((self.vocab_size), requires_grad=True)
-        #self.loss_func = nn.SoftMarginLoss()
-        self.loss_func = nn.NLLLoss()
+        # self.loss_func = nn.SoftMarginLoss()
+        self.optimizer = optim.Adagrad([self.w, self.b], lr=0.01)
+        self.loss_func = nn.BCELoss()
         self.loss = 0
         self.device = args.device
 
         # make all of them to gpu
-        #self.to(self.device)
+        # self.to(self.device)
 
     def forward(self, seg_dict):
         """
@@ -103,39 +105,47 @@ class Summarizer(nn.Module):
             softmax_res = F.softmax(linear_res, dim=1)
 
             # 根据softmax选择top 10个单词，作为标题，并组成数据
-            #top_res = torch.topk(softmax_res, 10)
-            #title_index = top_res[1].reshape((10))
-            #contrast_dict['gen'] = title_index.float()
+            # top_res = torch.topk(softmax_res, 10)
+            # title_index = top_res[1].reshape((10))
+            # contrast_dict['gen'] = title_index.float()
 
-            #goal_tgt = para_dict['tgt']
-            #pad_goal_tgt = align_tgt(goal_tgt)
-            #pad_goal_tgt_tensor = torch.tensor(pad_goal_tgt, dtype=torch.float32)
-            #contrast_dict['tgt'] = pad_goal_tgt_tensor
+            # goal_tgt = para_dict['tgt']
+            # pad_goal_tgt = align_tgt(goal_tgt)
+            # pad_goal_tgt_tensor = torch.tensor(pad_goal_tgt, dtype=torch.float32)
+            # contrast_dict['tgt'] = pad_goal_tgt_tensor
             """
             参考了pointer-generator代码的做法，找到对应坐标的index
             他们都会用到padding mask，即根据target长度变化的全1向量
-            """
+
             goal_tgt_index = torch.tensor(para_dict['tgt'])
+            goal_tgt_index = torch.unsqueeze(goal_tgt_index,0)
             pred_tgt = torch.gather(softmax_res,dim=1, index=goal_tgt_index)
             goal_tgt_mask = padding_tgt_mask(para_dict['tgt'])
+            print(goal_tgt_index)
+            """
+            # 3rd way
+            tgt_zero = torch.zeros(self.vocab_size)
+            tgt_index = torch.tensor(para_dict['tgt'], dtype=torch.long)
+            goal_tgt_mask = tgt_zero.index_fill(0, tgt_index, 1)
+            goal_tgt_mask = torch.unsqueeze(goal_tgt_mask, 0)
 
-            contrast_dict['gen'] = pred_tgt
-            contrast_list['tgt'] = goal_tgt_mask
+            contrast_dict['gen'] = softmax_res
+            contrast_dict['tgt'] = goal_tgt_mask
 
             contrast_list.append(contrast_dict)
 
         return contrast_list
 
-
-    def single_para_model(self,para_dict):
+    def single_para_model(self, para_dict):
         self.para_tokens_tensor = torch.tensor([para_dict['src']])
         self.para_segments_tensor = torch.tensor([para_dict['segs']])
-        self.encoded_output, _ = self.encoder(self.para_tokens_tensor, self.para_segments_tensor, output_all_encoded_layers=False)
+        self.encoded_output, _ = self.encoder(self.para_tokens_tensor, self.para_segments_tensor,
+                                              output_all_encoded_layers=False)
 
         # send encoded_output into decoder
         self.encoded_output = torch.transpose(self.encoded_output, 0, 1)
         self.decoded_output, _ = self.decoder(self.encoded_output)
-        #self.to(self.device)
+        # self.to(self.device)
 
         return self.decoded_output
 
@@ -155,27 +165,27 @@ class Summarizer(nn.Module):
 
 def padding_tgt_mask(index_list):
     tgt_len = len(index_list)
-    tgt_mask = torch.ones(tgt_len)
+    tgt_mask = torch.ones(1, tgt_len)
     return tgt_mask
 
 
 def get_maxlen(para_list):
-        """
-           获得一个segment中最长para的seq_len
-           :param para_list: 一个segment下所有的段落
-           :return: max_len
-           """
-        max_len = 0
-        for i in range(len(para_list)):
-            para_dict = para_list[i]
-            if i == 0:
-                max_len = len(para_dict['src'])
-            else:
-                src_len = len(para_dict['src'])
-                if src_len > max_len:
-                    max_len = src_len
+    """
+       获得一个segment中最长para的seq_len
+       :param para_list: 一个segment下所有的段落
+       :return: max_len
+       """
+    max_len = 0
+    for i in range(len(para_list)):
+        para_dict = para_list[i]
+        if i == 0:
+            max_len = len(para_dict['src'])
+        else:
+            src_len = len(para_dict['src'])
+            if src_len > max_len:
+                max_len = src_len
 
-        return max_len
+    return max_len
 
 
 def padding_tensor(src_len, max_len):
