@@ -48,7 +48,8 @@ class Summarizer(nn.Module):
         self.hidden_size = 768
         self.w = torch.randn((self.vocab_size, self.hidden_size), requires_grad=True)
         self.b = torch.randn((self.vocab_size), requires_grad=True)
-        self.loss_func = nn.SoftMarginLoss()
+        #self.loss_func = nn.SoftMarginLoss()
+        self.loss_func = nn.NLLLoss()
         self.loss = 0
         self.device = args.device
 
@@ -102,14 +103,24 @@ class Summarizer(nn.Module):
             softmax_res = F.softmax(linear_res, dim=1)
 
             # 根据softmax选择top 10个单词，作为标题，并组成数据
-            top_res = torch.topk(softmax_res, 10)
-            title_index = top_res[1].reshape((10))
-            contrast_dict['gen'] = title_index.float()
+            #top_res = torch.topk(softmax_res, 10)
+            #title_index = top_res[1].reshape((10))
+            #contrast_dict['gen'] = title_index.float()
 
-            goal_tgt = para_dict['tgt']
-            pad_goal_tgt = align_tgt(goal_tgt)
-            pad_goal_tgt_tensor = torch.tensor(pad_goal_tgt, dtype=torch.float32)
-            contrast_dict['tgt'] = pad_goal_tgt_tensor
+            #goal_tgt = para_dict['tgt']
+            #pad_goal_tgt = align_tgt(goal_tgt)
+            #pad_goal_tgt_tensor = torch.tensor(pad_goal_tgt, dtype=torch.float32)
+            #contrast_dict['tgt'] = pad_goal_tgt_tensor
+            """
+            参考了pointer-generator代码的做法，找到对应坐标的index
+            他们都会用到padding mask，即根据target长度变化的全1向量
+            """
+            goal_tgt_index = torch.tensor(para_dict['tgt'])
+            pred_tgt = torch.gather(softmax_res,dim=1, index=goal_tgt_index)
+            goal_tgt_mask = padding_tgt_mask(para_dict['tgt'])
+
+            contrast_dict['gen'] = pred_tgt
+            contrast_list['tgt'] = goal_tgt_mask
 
             contrast_list.append(contrast_dict)
 
@@ -140,6 +151,12 @@ class Summarizer(nn.Module):
 
         title = ' '.join(word_list)
         return title
+
+
+def padding_tgt_mask(index_list):
+    tgt_len = len(index_list)
+    tgt_mask = torch.ones(tgt_len)
+    return tgt_mask
 
 
 def get_maxlen(para_list):
